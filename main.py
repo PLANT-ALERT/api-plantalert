@@ -53,11 +53,16 @@ async def create_user(user: User):
     if cursor.fetchone()[0] > 0:
         raise HTTPException(status_code=400, detail="User already exists")
     cursor.execute(
-        "INSERT INTO users (home_id, image, username, email, password, created_at) VALUES (%s, %s, %s, %s, %s, %s)",
+        """
+        INSERT INTO users (home_id, image, username, email, password, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id
+        """,
         (user.home_id, user.image, user.username, user.email, user.password, user.created_at),
     )
+    user_id = cursor.fetchone()[0]
     cursor.connection.commit()
-    return user
+    return {"id": user_id, "user": user}
 
 @app.get("/users/")
 async def get_users():
