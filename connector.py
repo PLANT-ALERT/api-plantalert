@@ -29,3 +29,6 @@ cur = conn.cursor()
 
 def return_cursor():
     return cur
+
+def return_secret():
+    return os.getenv("SECRET")

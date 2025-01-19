@@ -1,11 +1,28 @@
+from http.client import HTTPResponse
+
 from fastapi import FastAPI, HTTPException, Query
+
+import connector
 from connector import return_cursor
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from fastapi.encoders import jsonable_encoder
+from fastapi.middleware.cors import CORSMiddleware
+from passlib.context import CryptContext
+import jwt
 
 app = FastAPI()
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Replace with specific origins for production
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows POST, GET, OPTIONS, etc.
+    allow_headers=["*"],  # Allows headers like 'Content-Type'
+)
 
 # Database cursor
 cursor = return_cursor()
@@ -17,15 +34,23 @@ class Home(BaseModel):
     create_at: datetime
 
 class User(BaseModel):
-    home_id: Optional[int]
-    image: str
+    home_id: Optional[int] = None
+    image: Optional[str] = None
     username: str
     email: str
     password: str
-    created_at: datetime
 
 class Sensor(BaseModel):
     user_id: int  # Association with a user
+    home_id: Optional[int]  # Association with a user
+    name: str
+    description: str
+    mac_address: str
+    location: str
+    age: int
+    flower_id: int
+
+class Sensor_Response(BaseModel):
     home_id: Optional[int]  # Association with a user
     name: str
     description: str
@@ -46,25 +71,52 @@ class Flower(BaseModel):
     min_air_temperature: int
     light: int
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class TokenResponse(BaseModel):
+    user_id: int
+
+SECRET_KEY = connector.return_secret()
+ALGORITHM = "HS256"
+
 # User Management Endpoints
-@app.post("/users/", response_model=User)
+@app.post("/users/", tags=["Users"])
 async def create_user(user: User):
     cursor.execute("SELECT COUNT(*) FROM users WHERE username = %s", (user.username,))
     if cursor.fetchone()[0] > 0:
-        raise HTTPException(status_code=400, detail="User already exists")
+        raise HTTPException(status_code=401, detail="User already exists")
+
+    hashed_password = pwd_context.hash(user.password)
     cursor.execute(
         """
-        INSERT INTO users (home_id, image, username, email, password, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO users (home_id, username, email, password, created_at)
+        VALUES (%s, %s, %s, %s, NOW())
         RETURNING id
         """,
-        (user.home_id, user.image, user.username, user.email, user.password, user.created_at),
+        (user.home_id, user.username, user.email, hashed_password),
     )
     user_id = cursor.fetchone()[0]
     cursor.connection.commit()
-    return {"id": user_id, "user": user}
+    return {"user_id": user_id }
 
-@app.get("/users/")
+@app.post("/login/", response_model=TokenResponse, tags=["Users"])
+async def login(login_request: LoginRequest):
+    cursor.execute("SELECT id, password FROM users WHERE username = %s", (login_request.username,))
+    result = cursor.fetchone()
+
+    if not result:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    user_id, hashed_password = result
+
+    if not pwd_context.verify(login_request.password, hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    return {"user_id": user_id}
+
+@app.get("/users/", tags=["Users"])
 async def get_users():
     cursor.execute("SELECT home_id, id, username, email, image, created_at FROM users")
     users = cursor.fetchall()  # Vrací seznam tuple
@@ -79,39 +131,35 @@ async def get_users():
         }
         for user in users
     ]
-    # Volitelně: Použít jsonable_encoder pro zajištění kompatibility s JSON serializací
     return jsonable_encoder(users_json)
 
-@app.get("/users/{user_id}")
+@app.get("/users/{user_id}", tags=["Users"])
 async def get_user(user_id: int):
-    cursor.execute("SELECT home_id, id, username, email, image, created_at FROM users WHERE id = %s", (user_id,))
+    cursor.execute("SELECT username, email, image, created_at FROM users WHERE id = %s", (user_id,))
     user = cursor.fetchone()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user_json = {
-        "home_id": user[0],
-        "id": user[1],
-        "username": user[2],
-        "email": user[3],
-        "image": user[4],
-        "created_at": user[5],
+        "username": user[0],
+        "email": user[1],
+        "image": user[2],
+        "created_at": user[3],
     }
 
-    # Volitelně: Použít jsonable_encoder pro zajištění kompatibility s JSON serializací
     return jsonable_encoder(user_json)
 
-@app.put("/users/{user_id}", response_model=User)
+@app.put("/users/{user_id}", response_model=User, tags=["Users"])
 async def update_user(user_id: int, user: User):
     cursor.execute("SELECT COUNT(*) FROM users WHERE id = %s", (user_id,))
     if cursor.fetchone()[0] == 0:
         raise HTTPException(status_code=404, detail="User not found")
     cursor.execute(
-        "UPDATE users SET home_id = %s, image = %s, username = %s, email = %s, password = %s, created_at = %s WHERE id = %s",
-        (user.home_id, user.image, user.username, user.email, user.password, user.created_at, user_id),
+        "UPDATE users SET home_id = %s, image = %s, username = %s, email = %s, password = %s WHERE id = %s",
+        (user.home_id, user.image, user.username, user.email, user.password, user_id),
     )
     return user
 
-@app.delete("/users/{user_id}")
+@app.delete("/users/{user_id}", tags=["Users"])
 async def delete_user(user_id: int):
     cursor.execute("SELECT COUNT(*) FROM users WHERE id = %s", (user_id,))
     if cursor.fetchone()[0] == 0:
@@ -120,7 +168,7 @@ async def delete_user(user_id: int):
     return {"detail": "User deleted"}
 
 # Home Management Endpoints
-@app.post("/homes/", response_model=Home)
+@app.post("/homes/", response_model=Home, tags=["Homes"])
 async def create_sensor(sensor: Home):
     cursor.execute("SELECT COUNT(*) FROM homes WHERE id = %s", (sensor.id,))
     if cursor.fetchone()[0] > 0:
@@ -134,7 +182,7 @@ async def create_sensor(sensor: Home):
     )
     return sensor
 
-@app.post("/sensors/", response_model=Sensor, status_code=201)
+@app.post("/sensors/", response_model=Sensor, status_code=201, tags=["Sensors"])
 async def create_sensor(sensor: Sensor):
     cursor.execute("SELECT * FROM sensors WHERE mac_address = %s", (sensor.mac_address,))
     if cursor.fetchone():
@@ -153,33 +201,42 @@ async def create_sensor(sensor: Sensor):
         raise HTTPException(status_code=500, detail=f"Failed to create sensor: {str(e)}")
     return sensor
 
-@app.get("/sensors/")
+@app.get("/sensors/", response_model=List[Sensor_Response], tags=["Sensors"])
 async def get_sensors(user_id: Optional[int] = Query(None), home_id: Optional[int] = Query(None)):
-    """Retrieve a list of sensors, optionally filtered by user_id or home_id."""
     if user_id is not None:
-        cursor.execute("SELECT * FROM sensors WHERE user_id = %s", (user_id,))
+        cursor.execute(
+            "SELECT home_id, name, description, mac_address, location, age, flower_id FROM sensors WHERE user_id = %s",
+            (user_id,)
+        )
     elif home_id is not None:
-        cursor.execute("SELECT * FROM sensors WHERE home_id = %s", (home_id,))
+        cursor.execute(
+            "SELECT home_id, name, description, mac_address, location, age, flower_id FROM sensors WHERE home_id = %s",
+            (home_id,)
+        )
     else:
-        cursor.execute("SELECT * FROM sensors")
+        cursor.execute(
+            "SELECT home_id, name, description, mac_address, location, age, flower_id FROM sensors"
+        )
 
-    sensors = cursor.fetchall()
-    return [
+    sensor_data = cursor.fetchall()
+
+    sensors = [
         {
-            "user_id": row[0],
-            "home_id": row[1],
-            "name": row[2],
-            "description": row[3],
-            "mac_address": row[4],
-            "location": row[5],
-            "age": row[6],
-            "flower_id": row[7],
-            "created_at": row[8]
+            "home_id": row[0],
+            "name": row[1],
+            "description": row[2],
+            "mac_address": row[3],
+            "location": row[4],
+            "age": row[5],
+            "flower_id": row[6],
         }
-        for row in sensors
+        for row in sensor_data
     ]
 
-@app.get("/sensors/{mac_address}")
+    return sensors
+
+
+@app.get("/sensors/{mac_address}", tags=["Sensors"])
 async def get_sensor(mac_address: str):
     """Retrieve a sensor by its MAC address."""
     cursor.execute("SELECT * FROM sensors WHERE mac_address = %s", (mac_address,))
@@ -200,7 +257,7 @@ async def get_sensor(mac_address: str):
 
     return jsonable_encoder(sensor_json)
 
-@app.put("/sensors/{mac_address}", response_model=Sensor)
+@app.put("/sensors/{mac_address}", response_model=Sensor, tags=["Sensors"])
 async def update_sensor(mac_address: str, updated_sensor: Sensor):
     """Update an existing sensor by its MAC address."""
     cursor.execute("SELECT * FROM sensors WHERE mac_address = %s", (mac_address,))
@@ -217,7 +274,7 @@ async def update_sensor(mac_address: str, updated_sensor: Sensor):
     )
     return updated_sensor
 
-@app.delete("/sensors/{mac_address}", response_model=dict)
+@app.delete("/sensors/{mac_address}", response_model=dict, tags=["Sensors"])
 async def delete_sensor(mac_address: str):
     """Delete a sensor by its MAC address."""
     cursor.execute("SELECT * FROM sensors WHERE mac_address = %s", (mac_address,))
