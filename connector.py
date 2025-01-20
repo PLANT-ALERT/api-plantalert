@@ -2,6 +2,8 @@ import mariadb
 import sys
 from dotenv import load_dotenv
 import os
+from influxdb_client import InfluxDBClient
+from influxdb_client.client.write_api import SYNCHRONOUS
 
 load_dotenv()
 
@@ -32,3 +34,8 @@ def return_cursor():
 
 def return_secret():
     return os.getenv("SECRET")
+
+influx_client = InfluxDBClient(url=os.getenv("INFLUXDB_URL"), token=os.getenv("INFLUXDB_TOKEN"), org=os.getenv("INFLUXDB_ORG"))
+
+def return_influxdb_client():
+    return influx_client

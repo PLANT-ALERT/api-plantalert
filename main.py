@@ -3,16 +3,19 @@ from http.client import HTTPResponse
 from fastapi import FastAPI, HTTPException, Query
 
 import connector
-from connector import return_cursor
+from connector import return_cursor, return_influxdb_client
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
-import jwt
+import os
+
 
 app = FastAPI()
+
+influx_client = return_influxdb_client();
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -58,6 +61,7 @@ class Sensor_Response(BaseModel):
     location: str
     age: int
     flower_id: int
+    created_at: datetime
 
 class Flower(BaseModel):
     user_id: Optional[int]  # null => demo flowers
@@ -80,6 +84,8 @@ class TokenResponse(BaseModel):
 
 SECRET_KEY = connector.return_secret()
 ALGORITHM = "HS256"
+
+
 
 # User Management Endpoints
 @app.post("/users/", tags=["Users"])
@@ -182,6 +188,57 @@ async def create_sensor(sensor: Home):
     )
     return sensor
 
+@app.get("/sensors/data/{mac_address}/{hours}/", tags=["Influx"])
+async def get_sensor_data(mac_address: str, hours: int):
+    query_api = influx_client.query_api()
+
+    query = f"""
+    from(bucket: "db")
+    |> range(start: -{hours}h) // Adjust the time range as needed
+    |> aggregateWindow(every: 5m, fn: mean)
+    |> filter(fn: (r) => r["topic"] == "/sensors/{mac_address}")
+    |> sort(columns: ["_field"], desc: false) // Replace "_field" with the desired column to sort by
+    """
+
+    tables = query_api.query(query)
+
+    results = []
+    for table in tables:
+        for record in table.records:
+            results.append({
+                "time": record.get_time(),
+                "field": record.get_field(),
+                "value": record.get_value(),
+            })
+
+    return results;
+
+@app.get("/sensors/last_data/{mac_address}/", tags=["Influx"])
+async def get_last_sensor_data(mac_address: str):
+    query_api = influx_client.query_api()
+
+    query = f"""
+    from(bucket: "db")
+        |> range(start: -1y) // Adjust the range as needed
+        |> filter(fn: (r) => r["topic"] == "/sensors/{mac_address}")
+        |> group(columns: ["_field"]) // Group by field to isolate each one
+        |> last() // Get the last value for each group (field)
+    """
+    # Execute query and fetch results
+    tables = query_api.query(query)
+
+    result = {}
+
+    # Parse the results
+    for table in tables:
+        for record in table.records:
+            result.update({
+                record.get_field(): record.get_value()
+            })
+
+    return result
+
+
 @app.post("/sensors/", response_model=Sensor, status_code=201, tags=["Sensors"])
 async def create_sensor(sensor: Sensor):
     cursor.execute("SELECT * FROM sensors WHERE mac_address = %s", (sensor.mac_address,))
@@ -190,11 +247,10 @@ async def create_sensor(sensor: Sensor):
     try:
         cursor.execute(
             """
-            INSERT INTO sensors (user_id, home_id, name, description, mac_address, location, age, flower_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now())
+            INSERT INTO sensors (user_id, name, mac_address, created_at)
+            VALUES (%s, %s, %s, now())
             """,
-            (sensor.user_id, sensor.home_id, sensor.name, sensor.description, sensor.mac_address, sensor.location,
-            sensor.age, sensor.flower_id)
+            (sensor.user_id, sensor.name, sensor.mac_address,)
         )
         cursor.connection.commit()
     except Exception as e:
@@ -205,17 +261,17 @@ async def create_sensor(sensor: Sensor):
 async def get_sensors(user_id: Optional[int] = Query(None), home_id: Optional[int] = Query(None)):
     if user_id is not None:
         cursor.execute(
-            "SELECT home_id, name, description, mac_address, location, age, flower_id FROM sensors WHERE user_id = %s",
+            "SELECT home_id, name, description, mac_address, location, age, flower_id, created_at FROM sensors WHERE user_id = %s",
             (user_id,)
         )
     elif home_id is not None:
         cursor.execute(
-            "SELECT home_id, name, description, mac_address, location, age, flower_id FROM sensors WHERE home_id = %s",
+            "SELECT home_id, name, description, mac_address, location, age, flower_id, created_at FROM sensors WHERE home_id = %s",
             (home_id,)
         )
     else:
         cursor.execute(
-            "SELECT home_id, name, description, mac_address, location, age, flower_id FROM sensors"
+            "SELECT home_id, name, description, mac_address, location, age, flower_id, created_at FROM sensors"
         )
 
     sensor_data = cursor.fetchall()
@@ -229,6 +285,7 @@ async def get_sensors(user_id: Optional[int] = Query(None), home_id: Optional[in
             "location": row[4],
             "age": row[5],
             "flower_id": row[6],
+            "created_at": row[7],
         }
         for row in sensor_data
     ]
@@ -256,6 +313,11 @@ async def get_sensor(mac_address: str):
     }
 
     return jsonable_encoder(sensor_json)
+
+class SensorDataResponse(BaseModel):
+    time: str
+    field_name: str
+    field_value: float
 
 @app.put("/sensors/{mac_address}", response_model=Sensor, tags=["Sensors"])
 async def update_sensor(mac_address: str, updated_sensor: Sensor):
