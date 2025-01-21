@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  fastapi-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - ".env"
+    container_name: fastapi_app
+    ports:
+      - "8000:80" # Maps port 8000 on the host to port 8000 in the container
+    volumes:
+      - .:/app # Mount the current directory into the container for development

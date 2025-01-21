@@ -1,16 +1,12 @@
-from http.client import HTTPResponse
-
 from fastapi import FastAPI, HTTPException, Query
 
-import connector
-from connector import return_cursor, return_influxdb_client
+from app.connector import return_secret, return_cursor, return_influxdb_client
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
-
 
 app = FastAPI()
 
@@ -81,7 +77,7 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     user_id: int
 
-SECRET_KEY = connector.return_secret()
+SECRET_KEY = return_secret()
 ALGORITHM = "HS256"
 
 
