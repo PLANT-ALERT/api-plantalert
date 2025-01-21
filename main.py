@@ -10,7 +10,6 @@ from datetime import datetime
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
-import os
 
 
 app = FastAPI()
