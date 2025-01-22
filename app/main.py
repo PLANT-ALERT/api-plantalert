@@ -252,7 +252,7 @@ async def create_sensor(sensor: Sensor):
         raise HTTPException(status_code=500, detail=f"Failed to create sensor: {str(e)}")
     return sensor
 
-@app.get("/sensors/", response_model=List[Sensor_Response], tags=["Sensors"])
+@app.get("/sensors/", tags=["Sensors"])
 async def get_sensors(user_id: Optional[int] = Query(None), home_id: Optional[int] = Query(None)):
     if user_id is not None:
         cursor.execute(
