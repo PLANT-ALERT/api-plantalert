@@ -13,6 +13,17 @@ db_password = os.getenv("DB_PASSWORD")
 db_port = os.getenv("DB_PORT")
 db_database = os.getenv("DB_DATABASE")
 
+if not all([db_host, db_user, db_password, db_port, db_database]):
+    missing_vars = [var for var, value in {
+        "DB_HOST": db_host,
+        "DB_USER": db_user,
+        "DB_PASSWORD": db_password,
+        "DB_PORT": db_port,
+        "DB_DATABASE": db_database
+    }.items() if not value]
+
+    raise EnvironmentError(f"Missing required environment variables: {', '.join(missing_vars)}")
+
 try:
     conn = mariadb.connect(
         user=db_user,
