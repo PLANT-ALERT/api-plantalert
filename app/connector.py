@@ -3,7 +3,6 @@ import sys
 from dotenv import load_dotenv
 import os
 from influxdb_client import InfluxDBClient
-from influxdb_client.client.write_api import SYNCHRONOUS
 
 load_dotenv()
 
