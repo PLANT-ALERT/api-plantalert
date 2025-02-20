@@ -2,8 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.include_routers import include_routers
 from pathlib import Path
+import os
 
-description = Path("app/description.md").read_text(encoding="utf-8")
+description = Path(os.path.dirname(os.path.abspath(__file__)) + "/description.md").read_text(encoding="utf-8")
 
 app = FastAPI(
     title="Plant Alert API",
