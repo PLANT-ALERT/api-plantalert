@@ -15,8 +15,8 @@ app = include_routers(app)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace with specific origins for production
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows POST, GET, OPTIONS, etc.
-    allow_headers=["*"],  # Allows headers like 'Content-Type'
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
