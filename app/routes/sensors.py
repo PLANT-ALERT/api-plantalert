@@ -2,39 +2,38 @@ from app.depedencies import cursor, pwd_context, influx_client
 from fastapi import HTTPException, Query
 from typing import Optional
 from fastapi.encoders import jsonable_encoder
-from app.models.sensors import Sensor, Sensor_Response, SensorDataResponse
+from app.models.sensors import Sensor, SensorLastDataResponse
 from fastapi import APIRouter
 
 router = APIRouter()
 
-@router.get("/data/{mac_address}/{hours}", tags=["Influx"])
-async def get_sensor_data(mac_address: str, hours: int):
-    query_api = influx_client.query_api()
+query_api = influx_client.query_api()
 
-    query = f"""
-    from(bucket: "db")
-    |> range(start: -{hours}h) // Adjust the time range as needed
-    |> aggregateWindow(every: 5m, fn: mean)
-    |> filter(fn: (r) => r["topic"] == "/sensors/{mac_address}")
-    |> sort(columns: ["_field"], desc: false) // Replace "_field" with the desired column to sort by
-    """
+# @router.get("/data/{mac_address}/{hours}", tags=["Influx"])
+# async def get_sensor_data(mac_address: str, hours: int):
+#     query = f"""
+#     from(bucket: "db")
+#     |> range(start: -{hours}h) // Adjust the time range as needed
+#     |> aggregateWindow(every: 5m, fn: mean)
+#     |> filter(fn: (r) => r["topic"] == "/sensors/{mac_address}")
+#     |> sort(columns: ["_field"], desc: false) // Replace "_field" with the desired column to sort by
+#     """
+#
+#     tables = query_api.query(query)
+#
+#     results = []
+#     for table in tables:
+#         for record in table.records:
+#             results.append({
+#                 "time": record.get_time(),
+#                 "field": record.get_field(),
+#                 "value": record.get_value(),
+#             })
+#
+#     return results;
 
-    tables = query_api.query(query)
-
-    results = []
-    for table in tables:
-        for record in table.records:
-            results.append({
-                "time": record.get_time(),
-                "field": record.get_field(),
-                "value": record.get_value(),
-            })
-
-    return results;
-
-@router.get("/last_data/{mac_address}", tags=["Influx"])
-async def get_last_sensor_data(mac_address: str):
-    query_api = influx_client.query_api()
+@router.get("/last_data/{mac_address}", description="returns last available data", response_model=SensorLastDataResponse)
+async def get_last_sensor_data(mac_address: str) -> SensorLastDataResponse:
 
     query = f"""
     from(bucket: "db")
@@ -57,12 +56,35 @@ async def get_last_sensor_data(mac_address: str):
 
     return result
 
+@router.get("/last_data/humidity/{mac_address}", description="returns only last known humidity", response_model=int)
+async def get_last_sensor_data_humidity(mac_address: str):
+    query = f"""
+    from(bucket: "db")
+        |> range(start: -1y) // Adjust the range as needed
+        |> filter(fn: (r) => r["topic"] == "/sensors/{mac_address}")
+        |> filter(fn: (r) => r["_field"] == "humidity")
+        |> group(columns: ["_field"]) // Group by field to isolate each one
+        |> last() // Get the last value for each group (field)
+    """
+    # Execute query and fetch results
+    tables = query_api.query(query)
 
-@router.post("", response_model=Sensor, status_code=201, tags=["Sensors"])
+    result: int = -1
+
+    # Parse the results
+    for table in tables:
+        for record in table.records:
+            result = record.get_value()
+
+
+    return result
+
+
+@router.post("", status_code=201)
 async def create_sensor(sensor: Sensor):
     cursor.execute("SELECT * FROM sensors WHERE mac_address = %s", (sensor.mac_address,))
     if cursor.fetchone():
-        raise HTTPException(status_code=400, detail="MAC address already exists.")
+        raise HTTPException(status_code=401, detail="MAC address already exists.")
     try:
         cursor.execute(
             """
@@ -112,45 +134,28 @@ async def get_sensors(user_id: Optional[int] = Query(None), home_id: Optional[in
     return sensors
 
 
-@router.get("/{mac_address}", tags=["Sensors"])
+@router.get("/{mac_address}")
 async def get_sensor(mac_address: str):
     """Retrieve a sensor by its MAC address."""
-    cursor.execute("SELECT * FROM sensors WHERE mac_address = %s", (mac_address,))
+    cursor.execute("SELECT home_id, name, location, description, age, flower_id, created_at FROM sensors WHERE mac_address = %s", (mac_address,))
     row = cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Sensor not found.")
     sensor_json = {
-        "user_id": row[0],
-        "home_id": row[1],
-        "name": row[2],
-        "description": row[3],
-        "mac_address": row[4],
-        "location": row[5],
-        "age": row[6],
-        "flower_id": row[7],
-        "created_at": row[8]
+        "home_id": row.home_id,
+        "name": row.name,
+        "description": row.description,
+        "mac_address": row.mac_address,
+        "location": row.location,
+        "age": row.age,
+        "flower_id": row.flower_id,
+        "created_at": row.created_at,
     }
 
     return jsonable_encoder(sensor_json)
 
-@router.put("/{mac_address}", response_model=Sensor, tags=["Sensors"])
-async def update_sensor(mac_address: str, updated_sensor: Sensor):
-    """Update an existing sensor by its MAC address."""
-    cursor.execute("SELECT * FROM sensors WHERE mac_address = %s", (mac_address,))
-    if not cursor.fetchone():
-        raise HTTPException(status_code=404, detail="Sensor not found.")
 
-    cursor.execute(
-        """
-        UPDATE sensors
-        SET user_id = %s, home_id = %s, name = %s, description = %s, location = %s, age = %s, flower_id = %s, created_at = %s
-        WHERE mac_address = %s
-        """,
-        (updated_sensor.user_id, updated_sensor.home_id, updated_sensor.name, updated_sensor.description, updated_sensor.location, updated_sensor.age, updated_sensor.flower_id, updated_sensor.created_at, mac_address)
-    )
-    return updated_sensor
-
-@router.delete("/{mac_address}", response_model=dict, tags=["Sensors"])
+@router.delete("/{mac_address}", response_model=dict)
 async def delete_sensor(mac_address: str):
     """Delete a sensor by its MAC address."""
     cursor.execute("SELECT * FROM sensors WHERE mac_address = %s", (mac_address,))

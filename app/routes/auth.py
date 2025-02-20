@@ -1,16 +1,19 @@
 from fastapi import HTTPException
-from fastapi.encoders import jsonable_encoder
 from app.depedencies import cursor, pwd_context
 from app.models.users import User, TokenResponse, LoginRequest
 from fastapi import APIRouter
 
 router = APIRouter()
 
-@router.post("/register")
+@router.post("/register", response_model=TokenResponse)
 async def create_user(user: User):
     cursor.execute("SELECT COUNT(*) FROM users WHERE username = %s", (user.username,))
     if cursor.fetchone()[0] > 0:
         raise HTTPException(status_code=401, detail="User already exists")
+
+    cursor.execute("SELECT COUNT(*) FROM users WHERE email = %s", (user.email,))
+    if cursor.fetchone()[0] > 0:
+        raise HTTPException(status_code=402, detail="Email already used")
 
     hashed_password = pwd_context.hash(user.password)
     cursor.execute(
@@ -23,7 +26,7 @@ async def create_user(user: User):
     )
     user_id = cursor.fetchone()[0]
     cursor.connection.commit()
-    return {"user_id": user_id }
+    return { "user_id": user_id }
 
 @router.post("/login", response_model=TokenResponse)
 async def login(login_request: LoginRequest):
