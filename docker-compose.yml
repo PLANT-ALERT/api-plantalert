@@ -12,7 +12,7 @@ services:
       - .:/app # Mount the current directory into the container for development
     networks:
       mariadb-influxdb-api-rocnikovka:
-        ipv4_address: 172.19.0.3
+        ipv4_address: 172.19.0.2
 
 networks:
   mariadb-influxdb-api-rocnikovka:
