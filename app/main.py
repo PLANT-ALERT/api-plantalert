@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 
 description = """
-    * description
+    [github repository of project](https://github.com/PLANT-ALERT/api-plantalert)
 """
 
 app = FastAPI(
