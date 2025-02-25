@@ -12,7 +12,7 @@ app = FastAPI(
     title="Plant Alert API",
     description=description,
     version="0.0.1",
-)
+)   
 
 app = include_routers(app)
 

@@ -1,14 +1,19 @@
 version: "3.8"
-
 services:
-  fastapi-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  app:
+    build: .
+    container_name: fastapi_plantalert
+    restart: always
     env_file:
       - ".env"
-    container_name: fastapi_app
     ports:
-      - "8000:80" # Maps port 8000 on the host to port 8000 in the container
+      - "8000:80"  # Adjust port as needed
     volumes:
       - .:/app # Mount the current directory into the container for development
+    networks:
+      mariadb-influxdb-api-rocnikovka:
+        ipv4_address: 172.19.0.3
+
+networks:
+  mariadb-influxdb-api-rocnikovka:
+    external: true
