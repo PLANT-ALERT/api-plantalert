@@ -1,7 +1,8 @@
 from sqlalchemy import Column, Integer, String, Float
 from app.connector import Base, engine
+
 class Flower(Base):
-    __tablename__ = 'flowers'
+    __tablename__ = 'flower'
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=True)
     max_soil_humidity = Column(Integer, nullable=True)

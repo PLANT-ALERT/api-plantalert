@@ -7,11 +7,11 @@ from app.models.user import User
 
 
 class Sensor(Base):
-    __tablename__ = 'sensors'
+    __tablename__ = 'sensor'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False)
-    mac_address = Column(String, nullable=False)
-    description = Column(String, nullable=True)
+    name = Column(String(50), nullable=False)
+    mac_address = Column(String(20), nullable=False)
+    description = Column(String(255), nullable=True)
     age = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=False)
     flower_id = Column(Integer, ForeignKey(Flower.id) , nullable=True)
@@ -22,3 +22,5 @@ class Sensor(Base):
     flower = relationship('Flower', foreign_keys='Sensor.flower_id')
     home = relationship('Home', foreign_keys='Sensor.home_id')
     user = relationship('User', foreign_keys='Sensor.user_id')
+
+Base.metadata.create_all(engine)

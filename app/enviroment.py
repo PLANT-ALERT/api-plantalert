@@ -12,3 +12,4 @@ class Settings(BaseSettings):
     INFLUXDB_ORG: str
 
 enviroment = Settings()
+
