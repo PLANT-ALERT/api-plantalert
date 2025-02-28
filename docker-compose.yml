@@ -7,7 +7,7 @@ services:
     env_file:
       - ".env"
     ports:
-      - "8001:80"  # Adjust port as needed
+      - "8001:8000"  # Adjust port as needed
     volumes:
       - .:/app # Mount the current directory into the container for development
     networks:
