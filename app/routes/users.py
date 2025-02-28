@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
-from app.depedencies import cursor, pwd_context
-from app.models.users import User, TokenResponse, LoginRequest
+from app.depedencies import pwd_context
+from app.schemas.users import User, TokenResponse, LoginRequest
 from fastapi import APIRouter
 
 router = APIRouter()
