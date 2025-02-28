@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.include_routers import include_routers
-from pathlib import Path
-import os
 
 description = """
     [github repository of project](https://github.com/PLANT-ALERT/api-plantalert)
