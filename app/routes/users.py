@@ -1,15 +1,18 @@
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
-from app.depedencies import cursor, pwd_context
-from app.models.users import User, TokenResponse, LoginRequest
 from fastapi import APIRouter
+from app.models.user import User
+# tohle potrevuje kazda route
+from fastapi.params import Depends
+from sqlalchemy.orm import Session
+from app.connector import get_db
 
 router = APIRouter()
 
 @router.get("")
-async def get_users():
-    cursor.execute("SELECT home_id, id, username, email, image, created_at FROM users")
-    users = cursor.fetchall()  # Vrací seznam tuple
+async def get_users(db: Session = Depends(get_db)):
+
+    users = db.query(User).all()
     users_json = [
         {
             "home_id": user[0],
@@ -24,9 +27,8 @@ async def get_users():
     return jsonable_encoder(users_json)
 
 @router.get("/{user_id}")
-async def get_user(user_id: int):
-    cursor.execute("SELECT username, email, image, created_at FROM users WHERE id = %s", (user_id,))
-    user = cursor.fetchone()
+async def get_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).where(User.id == user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user_json = {
