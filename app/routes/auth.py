@@ -1,54 +1,44 @@
 from fastapi import HTTPException
-from fastapi.params import Depends
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
-from app.depedencies import pwd_context
-from app.schemas.users import User, TokenResponse, LoginRequest
-from app.models.user import User as UserModel
+from app.depedencies import cursor, pwd_context
+from app.models.users import User, TokenResponse, LoginRequest
 from fastapi import APIRouter
-from app.connector import get_db
 
 router = APIRouter()
 
 @router.post("/register", response_model=TokenResponse)
-async def create_user(user: User, db: Session = Depends(get_db)):
-    if db.query(UserModel).filter(UserModel.username == user.username).first():
+async def create_user(user: User):
+    cursor.execute("SELECT COUNT(*) FROM users WHERE username = %s", (user.username,))
+    if cursor.fetchone()[0] > 0:
         raise HTTPException(status_code=401, detail="User already exists")
 
-    if db.query(UserModel).filter(UserModel.email == user.email).first():
+    cursor.execute("SELECT COUNT(*) FROM users WHERE email = %s", (user.email,))
+    if cursor.fetchone()[0] > 0:
         raise HTTPException(status_code=402, detail="Email already used")
 
-    # Hash the password
     hashed_password = pwd_context.hash(user.password)
-
-    # Create a new user
-    new_user = UserModel(
-        home_id=user.home_id,
-        username=user.username,
-        email=user.email,
-        password=hashed_password,
+    cursor.execute(
+        """
+        INSERT INTO users (home_id, username, email, password, created_at)
+        VALUES (%s, %s, %s, %s, NOW())
+        RETURNING id
+        """,
+        (user.home_id, user.username, user.email, hashed_password),
     )
-
-    try:
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Database error")
-
-    return {"user_id": new_user.id}
+    user_id = cursor.fetchone()[0]
+    cursor.connection.commit()
+    return { "user_id": user_id }
 
 @router.post("/login", response_model=TokenResponse)
-async def login(login_request: LoginRequest, db: Session = Depends(get_db)):
-    # Fetch user by username
-    user = db.query(UserModel).filter(UserModel.username == login_request.username).first()
+async def login(login_request: LoginRequest):
+    cursor.execute("SELECT id, password FROM users WHERE username = %s", (login_request.username,))
+    result = cursor.fetchone()
 
-    if not user:
-        raise HTTPException(status_code=401, detail="Username not found")
+    if not result:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
 
-    # Verify password
-    if not pwd_context.verify(login_request.password, user.password):
-        raise HTTPException(status_code=402, detail="Password not found")
+    user_id, hashed_password = result
 
-    return { "user_id": user.id }
+    if not pwd_context.verify(login_request.password, hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    return {"user_id": user_id}
