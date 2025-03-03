@@ -51,4 +51,7 @@ async def login(login_request: LoginRequest, db: Session = Depends(get_db)):
     if not pwd_context.verify(login_request.password, user.password):
         raise HTTPException(status_code=402, detail="Password not found")
 
-    return { "user_id": user.id }
+    return TokenResponse(
+        user_id=int(user.id)
+    )
+

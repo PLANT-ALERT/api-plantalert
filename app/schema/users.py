@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -14,3 +16,9 @@ class User(BaseModel):
     username: str
     email: str
     password: str
+
+class UserResponse(BaseModel):
+    username: str
+    email: str
+    image: str
+    created_at: datetime

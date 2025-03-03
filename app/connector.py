@@ -18,6 +18,8 @@ engine = create_engine(url)
 session = sessionmaker(bind=engine)
 Base = declarative_base()
 
+
+
 def get_db():
     db = session()
     try:

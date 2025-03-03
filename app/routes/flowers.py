@@ -4,7 +4,7 @@ from fastapi import HTTPException, Query, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from fastapi import APIRouter
-from typing import List
+from typing import List, Optional, Union
 from app.models.flower import Flower
 
 router = APIRouter()
@@ -64,13 +64,17 @@ async def create_flower_bulk(flowers: List[FlowerCreate], db: Session = Depends(
             raise HTTPException(status_code=500, detail="Database error")
 
 @router.get("", response_model=List[FlowerResponse])
-async def return_flower(db: Session = Depends(get_db)):
-    response = db.query(Flower).all()
+async def return_flower(flower_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+    if flower_id:
+        response = db.query(Flower).filter(Flower.id == flower_id).all()
+    else:
+        response = db.query(Flower).all()
 
     flower_response = [
         FlowerResponse(
+            id=int(flower.id),
             name=str(flower.name),
-            light=str(flower.light),
+            light=int(flower.light),
             image=str(flower.image),
             air_temperature=MinMax(min=float(flower.min_air_temperature), max=float(flower.max_air_temperature)),
             soil_humidity=MinMax(min=float(flower.min_soil_humidity), max=float(flower.max_soil_humidity)),

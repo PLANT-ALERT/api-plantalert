@@ -4,9 +4,10 @@ from sqlalchemy.exc import IntegrityError
 from app.depedencies import pwd_context, influx_client
 from fastapi import HTTPException, Query
 from typing import Optional
-from fastapi.encoders import jsonable_encoder
-from app.schema.sensors import Sensor, SensorLastDataResponse
+from app.schema.flower import FlowerResponse, MinMax
+from app.schema.sensors import Sensor, SensorLastDataResponse, FlowerChange
 from app.models.sensor import Sensor as SensorModel
+from app.models.flower import Flower as FlowerModel
 from fastapi import APIRouter
 from sqlalchemy.orm import Session
 
@@ -104,38 +105,66 @@ async def create_sensor(sensor: Sensor, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail="Database error")
 
+@router.put("/flower")
+async def set_flower(sensor: FlowerChange, db: Session = Depends(get_db)):
+    if sensor.flower_id is not None and db.query(FlowerModel).filter(FlowerModel.id == sensor.flower_id).count() <= 0:
+        raise HTTPException(status_code=404, detail="Flower not found")
+    flower = db.query(SensorModel).filter(SensorModel.id == sensor.sensor_id).first()
+    flower.flower_id = sensor.flower_id
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Database error")
+
+@router.get("/flower")
+async def get_flower_by_sensor(sensor_id: int, db: Session = Depends(get_db)):
+    sensor = db.query(SensorModel).filter(SensorModel.id == sensor_id).first()
+
+    if sensor is None:
+        raise HTTPException(status_code=404, detail="Sensor not found")
+
+    flower = db.query(FlowerModel).filter(FlowerModel.id == sensor.flower_id).first()
+
+    response = FlowerResponse(
+            id=int(flower.id),
+            name=str(flower.name),
+            light=int(flower.light),
+            image=str(flower.image),
+            air_temperature=MinMax(min=float(flower.min_air_temperature), max=float(flower.max_air_temperature)),
+            soil_humidity=MinMax(min=float(flower.min_soil_humidity), max=float(flower.max_soil_humidity)),
+            air_humidity=MinMax(min=float(flower.min_air_humidity), max=float(flower.max_air_humidity)),
+        )
+
+    return response
+
+
+
 @router.get("")
 async def get_sensors(
     user_id: Optional[int] = Query(None),
     home_id: Optional[int] = Query(None),
+    mac_address: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    query = db.query(Sensor)
+    query = db.query(SensorModel)
 
     if user_id is not None:
-        query = query.filter(Sensor.user_id == user_id)
+        query = query.filter(SensorModel.user_id == user_id)
     elif home_id is not None:
-        query = query.filter(Sensor.home_id == home_id)
+        query = query.filter(SensorModel.home_id == home_id)
+    elif mac_address is not None:
+        query = query.filter(SensorModel.mac_address == mac_address)
 
     sensors = query.all()
 
     return sensors
 
-
-@router.get("/{mac_address}")
-async def get_sensor(mac_address: str, db: Session = Depends(get_db)):
-    sensor = db.query(Sensor).filter(Sensor.mac_address == mac_address).first()
-
-    if not sensor:
-        raise HTTPException(status_code=404, detail="Sensor not found.")
-
-    return jsonable_encoder(sensor)
-
-
 @router.delete("/{mac_address}", response_model=dict)
 async def delete_sensor(mac_address: str, db: Session = Depends(get_db)):
     # Find the sensor
-    sensor = db.query(Sensor).filter(Sensor.mac_address == mac_address).first()
+    sensor = db.query(SensorModel).filter(SensorModel.mac_address == mac_address).first()
 
     if not sensor:
         raise HTTPException(status_code=404, detail="Sensor not found.")

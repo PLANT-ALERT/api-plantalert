@@ -16,6 +16,7 @@ class FlowerCreate(BaseModel):
 
 
 class FlowerResponse(BaseModel):
+    id: int
     name: str
     image: Optional[str]
     light: Optional[int]
