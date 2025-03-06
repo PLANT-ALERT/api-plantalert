@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     INFLUXDB_URL: str
     INFLUXDB_TOKEN: str
     INFLUXDB_ORG: str
+    NATIVENOTIFY_FIRST: str
+    NATIVENOTIFY_SECOND: str
 
 enviroment = Settings()
 

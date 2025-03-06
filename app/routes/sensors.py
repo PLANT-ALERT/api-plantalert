@@ -15,31 +15,8 @@ router = APIRouter()
 
 query_api = influx_client.query_api()
 
-# @router.get("/data/{mac_address}/{hours}", tags=["Influx"])
-# async def get_sensor_data(mac_address: str, hours: int):
-#     query = f"""
-#     from(bucket: "db")
-#     |> range(start: -{hours}h) // Adjust the time range as needed
-#     |> aggregateWindow(every: 5m, fn: mean)
-#     |> filter(fn: (r) => r["topic"] == "/sensors/{mac_address}")
-#     |> sort(columns: ["_field"], desc: false) // Replace "_field" with the desired column to sort by
-#     """
-#
-#     tables = query_api.query(query)
-#
-#     results = []
-#     for table in tables:
-#         for record in table.records:
-#             results.append({
-#                 "time": record.get_time(),
-#                 "field": record.get_field(),
-#                 "value": record.get_value(),
-#             })
-#
-#     return results;
-
 @router.get("/last_data/{mac_address}", description="returns last available data", response_model=SensorLastDataResponse)
-async def get_last_sensor_data(mac_address: str) -> SensorLastDataResponse:
+async def get_last_sensor_data(mac_address: str):
 
     query = f"""
     from(bucket: "db")
