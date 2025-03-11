@@ -23,17 +23,25 @@ def fetch_sensor_data(mac_address: str, hours: int, field_name: str):
 
     results = []
     for table in tables:
+        if not table.records:
+            continue
         for record in table.records:
             results.append(ChartResponse(
-                x=str(record.get_time()),  # Convert to milliseconds
+                x=str(record.get_time()),
                 y=record.get_value(),
                 extraData=extraData(
                     formattedValue=str(f"{record.get_value()}"),
-                    formattedTime=str(f"{record.get_time().isoformat()}"),
+                    formattedTime=record.get_time().isoformat(),
                 )
             ))
 
+    print(f"DEBUG: Results length = {len(results)}")
+
+    if not results:
+        raise HTTPException(status_code=404, detail="No data found for given MAC address and field")
+
     return results
+
 
 
 @router.get("/soil-humidity/{mac_address}/{hours}", response_model=List[ChartResponse])

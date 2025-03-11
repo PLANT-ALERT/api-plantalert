@@ -105,6 +105,7 @@ async def get_flower_by_sensor(sensor_id: int, db: Session = Depends(get_db)):
     flower = db.query(FlowerModel).filter(FlowerModel.id == sensor.flower_id).first()
 
     response = FlowerResponse(
+            user_id=None,
             id=int(flower.id),
             name=str(flower.name),
             light=int(flower.light),

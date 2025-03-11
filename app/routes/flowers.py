@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from fastapi import APIRouter
 from typing import List, Optional, Union
 from app.models.flower import Flower
+from app.schema.flower import FlowerSortedResponse, FlowerResponse
 
 router = APIRouter()
 
@@ -63,23 +64,58 @@ async def create_flower_bulk(flowers: List[FlowerCreate], db: Session = Depends(
             db.rollback()
             raise HTTPException(status_code=500, detail="Database error")
 
-@router.get("", response_model=List[FlowerResponse])
-async def return_flower(flower_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
-    if flower_id:
-        response = db.query(Flower).filter(Flower.id == flower_id).all()
-    else:
-        response = db.query(Flower).all()
+@router.get("", response_model=FlowerSortedResponse)
+async def return_flowers(
+    user_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db)
+):
+    user_flowers = []
+    default_flowers = []
+    other_flowers = []
 
-    flower_response = [
-        FlowerResponse(
-            id=int(flower.id),
-            name=str(flower.name),
-            light=int(flower.light),
-            image=str(flower.image),
-            air_temperature=MinMax(min=float(flower.min_air_temperature), max=float(flower.max_air_temperature)),
-            soil_humidity=MinMax(min=float(flower.min_soil_humidity), max=float(flower.max_soil_humidity)),
-            air_humidity=MinMax(min=float(flower.min_air_humidity), max=float(flower.max_air_humidity)),
-        )
-        for flower in response
-    ]
-    return flower_response
+    if user_id is not None:
+        user_flowers = db.query(Flower).filter(Flower.user_id == user_id).all()
+        other_flowers = db.query(Flower).filter(Flower.user_id != user_id).filter(Flower.user_id != None).all()
+    else:
+        other_flowers = db.query(Flower).filter(Flower.user_id != None).all()
+
+    default_flowers = db.query(Flower).filter((Flower.user_id == 0) | (Flower.user_id == None)).all()
+
+    def serialize(flowers: List[Flower]) -> Optional[List[FlowerResponse]]:
+        if not flowers:
+            return None
+        return [
+            FlowerResponse(
+                user_id=flower.user_id,
+                id=flower.id,
+                name=flower.name,
+                light=flower.light,
+                image=flower.image,
+                air_temperature=MinMax(min=flower.min_air_temperature, max=flower.max_air_temperature),
+                soil_humidity=MinMax(min=flower.min_soil_humidity, max=flower.max_soil_humidity),
+                air_humidity=MinMax(min=flower.min_air_humidity, max=flower.max_air_humidity),
+            )
+            for flower in flowers
+        ]
+
+    return FlowerSortedResponse(
+        user_flowers=serialize(user_flowers),
+        default_flowers=serialize(default_flowers),
+        other_flowers=serialize(other_flowers),
+    )
+
+
+@router.get("/{flower_id}", response_model=List[FlowerResponse])
+async def return_flowers(flower_id: int, db: Session = Depends(get_db)):
+    flower = db.query(Flower).filter(Flower.id == flower_id).first()
+
+    return FlowerResponse(
+        id=flower.id,
+        name=flower.name,
+        light=flower.light,
+        image=flower.image,
+        air_temperature=MinMax(min=flower.min_air_temperature, max=flower.max_air_temperature),
+        soil_humidity=MinMax(min=flower.min_soil_humidity, max=flower.max_soil_humidity),
+        air_humidity=MinMax(min=flower.min_air_humidity, max=flower.max_air_humidity),
+    )
+
