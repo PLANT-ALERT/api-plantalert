@@ -155,6 +155,9 @@ async def delete_sensor(mac_address: str, db: Session = Depends(get_db)):
 
 @router.get("/am_i_registred/{mac_address}", status_code=200, response_model=str, description="Checks if sensors macadd is in database, used for factory reseting sensor if not present in db")
 async def am_i_registred(mac_address: str, db: Session = Depends(get_db)):
+    if len(mac_address) == 12:
+        mac_address = ":".join(mac_address[i:i + 2] for i in range(0, 12, 2))
+
     sensor = db.query(SensorModel).filter(SensorModel.mac_address == mac_address).first()
 
     if sensor:
