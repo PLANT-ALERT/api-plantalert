@@ -152,3 +152,13 @@ async def delete_sensor(mac_address: str, db: Session = Depends(get_db)):
     db.commit()
 
     return {"detail": "Sensor deleted successfully."}
+
+@router.get("/am_i_registred/{mac_address}", status_code=200, response_model=str, description="Checks if sensors macadd is in database, used for factory reseting sensor if not present in db")
+async def am_i_registred(mac_address: str, db: Session = Depends(get_db)):
+    sensor = db.query(SensorModel).filter(SensorModel.mac_address == mac_address).first()
+
+    if sensor:
+        return "ok"
+
+    if not sensor:
+        raise HTTPException(status_code=204, detail="Sensor not found.")
