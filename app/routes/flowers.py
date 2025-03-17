@@ -105,8 +105,8 @@ async def return_flowers(
     )
 
 
-@router.get("/{flower_id}", response_model=List[FlowerResponse])
-async def return_flowers(flower_id: int, db: Session = Depends(get_db)):
+@router.get("/{flower_id}", response_model=FlowerResponse)
+async def return_flower(flower_id: int, db: Session = Depends(get_db)):
     flower = db.query(Flower).filter(Flower.id == flower_id).first()
 
     return FlowerResponse(

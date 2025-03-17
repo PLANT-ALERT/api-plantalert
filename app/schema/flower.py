@@ -16,14 +16,14 @@ class FlowerCreate(BaseModel):
     air_temperature: Optional[MinMax]
 
 class FlowerResponse(BaseModel):
-    user_id: Optional[int]
     id: int
     name: str
-    image: Optional[str]
-    light: Optional[int]
-    soil_humidity: Optional[MinMax]
-    air_humidity: Optional[MinMax]
-    air_temperature: Optional[MinMax]
+    user_id: Optional[int] = None
+    image: Optional[str] = None
+    light: Optional[int] = None
+    soil_humidity: Optional[MinMax] = None
+    air_humidity: Optional[MinMax] = None
+    air_temperature: Optional[MinMax] = None
 
 
 class FlowerSortedResponse(BaseModel):

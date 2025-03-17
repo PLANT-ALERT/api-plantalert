@@ -1,11 +1,12 @@
-from fastapi.params import Depends
+from fastapi.params import Depends, List
 from app.connector import get_db
 from sqlalchemy.exc import IntegrityError
 from app.depedencies import pwd_context, influx_client
 from fastapi import HTTPException, Query
 from typing import Optional
+
 from app.schema.flower import FlowerResponse, MinMax
-from app.schema.sensors import Sensor, SensorLastDataResponse, FlowerChange
+from app.schema.sensors import SensorCreate, SensorLastDataResponse, FlowerChange, SensorGet
 from app.models.sensor import Sensor as SensorModel
 from app.models.flower import Flower as FlowerModel
 from fastapi import APIRouter
@@ -17,7 +18,6 @@ query_api = influx_client.query_api()
 
 @router.get("/last_data/{mac_address}", description="returns last available data", response_model=SensorLastDataResponse)
 async def get_last_sensor_data(mac_address: str):
-
     query = f"""
     from(bucket: "db")
         |> range(start: -1y) // Adjust the range as needed
@@ -25,19 +25,28 @@ async def get_last_sensor_data(mac_address: str):
         |> group(columns: ["_field"]) // Group by field to isolate each one
         |> last() // Get the last value for each group (field)
     """
-    # Execute query and fetch results
     tables = query_api.query(query)
 
-    result = {}
+    result = {
 
-    # Parse the results
+    }
+
     for table in tables:
         for record in table.records:
             result.update({
                 record.get_field(): record.get_value()
             })
 
-    return result
+    return SensorLastDataResponse(
+        light=result.get("light"),
+        soil=result.get("soil"),
+        humidity=result.get("humidity"),
+        temp=result.get("temp"),
+    )
+
+
+
+
 
 @router.get("/last_data/humidity/{mac_address}", description="returns only last known humidity", response_model=int)
 async def get_last_sensor_data_humidity(mac_address: str):
@@ -52,19 +61,21 @@ async def get_last_sensor_data_humidity(mac_address: str):
     # Execute query and fetch results
     tables = query_api.query(query)
 
-    result: int = -1
+    result: int | None = None
 
     # Parse the results
     for table in tables:
         for record in table.records:
             result = record.get_value()
 
+    if result is None:
+        raise HTTPException(status_code=204, detail="No data here")
 
     return result
 
 
 @router.post("")
-async def create_sensor(sensor: Sensor, db: Session = Depends(get_db)):
+async def create_sensor(sensor: SensorCreate, db: Session = Depends(get_db)):
     if db.query(SensorModel).filter(SensorModel.mac_address == sensor.mac_address).first():
         raise HTTPException(status_code=401, detail="MAC address already exists.")
 
@@ -95,7 +106,7 @@ async def set_flower(sensor: FlowerChange, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail="Database error")
 
-@router.get("/flower")
+@router.get("/flower/{sensor_id}", response_model=FlowerResponse)
 async def get_flower_by_sensor(sensor_id: int, db: Session = Depends(get_db)):
     sensor = db.query(SensorModel).filter(SensorModel.id == sensor_id).first()
 
@@ -104,22 +115,21 @@ async def get_flower_by_sensor(sensor_id: int, db: Session = Depends(get_db)):
 
     flower = db.query(FlowerModel).filter(FlowerModel.id == sensor.flower_id).first()
 
-    response = FlowerResponse(
-            user_id=None,
-            id=int(flower.id),
-            name=str(flower.name),
-            light=int(flower.light),
-            image=str(flower.image),
-            air_temperature=MinMax(min=float(flower.min_air_temperature), max=float(flower.max_air_temperature)),
-            soil_humidity=MinMax(min=float(flower.min_soil_humidity), max=float(flower.max_soil_humidity)),
-            air_humidity=MinMax(min=float(flower.min_air_humidity), max=float(flower.max_air_humidity)),
+    if flower is None:
+        raise HTTPException(status_code=405, detail="Sensor has no flower")
+    else:
+        return FlowerResponse(
+            user_id=flower.user_id,
+            id=flower.id,
+            name=flower.name,
+            light=flower.light,
+            image=flower.image,
+            air_temperature=MinMax(min=flower.min_air_temperature, max=flower.max_air_temperature),
+            soil_humidity=MinMax(min=flower.min_soil_humidity, max=flower.max_soil_humidity),
+            air_humidity=MinMax(min=flower.min_air_humidity, max=flower.max_air_humidity),
         )
 
-    return response
-
-
-
-@router.get("")
+@router.get("", response_model=Optional[List[SensorGet]])
 async def get_sensors(
     user_id: Optional[int] = Query(None),
     home_id: Optional[int] = Query(None),
@@ -137,7 +147,20 @@ async def get_sensors(
 
     sensors = query.all()
 
-    return sensors
+    return [
+        SensorGet(
+            id=sensor.id,
+            description=sensor.description,
+            mac_address=sensor.mac_address,
+            name=sensor.name,
+            age=sensor.age,
+            flower_id=sensor.flower_id,
+            home_id=sensor.home_id,
+            created_at=sensor.created_at,
+            user_id=sensor.user_id
+        )
+        for sensor in sensors
+    ]
 
 @router.delete("/{mac_address}", response_model=dict)
 async def delete_sensor(mac_address: str, db: Session = Depends(get_db)):
