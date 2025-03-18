@@ -52,9 +52,6 @@ async def get_last_sensor_data(mac_address: str):
     return SensorLastDataResponse(**result)
 
 
-
-
-
 @router.get("/last_data/humidity/{mac_address}", description="returns only last known humidity", response_model=int)
 async def get_last_sensor_data_humidity(mac_address: str):
     query = f"""

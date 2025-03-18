@@ -14,7 +14,7 @@ def fetch_sensor_data(mac_address: str, hours: int, field_name: str):
     |> range(start: -{hours}h)
     |> filter(fn: (r) => r["topic"] == "/sensors/{mac_address}")
     |> filter(fn: (r) => r["_field"] == "{field_name}")
-    |> aggregateWindow(every: 1m, fn: mean)
+    |> aggregateWindow(every: 30m, fn: mean)
     |> filter(fn: (r) => exists r._value)
     |> yield(name: "mean")
     """
