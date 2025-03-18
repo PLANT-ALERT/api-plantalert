@@ -16,33 +16,40 @@ router = APIRouter()
 
 query_api = influx_client.query_api()
 
-@router.get("/last_data/{mac_address}", description="returns last available data", response_model=SensorLastDataResponse)
+@router.get("/last_data/{mac_address}", description="Returns last available data", response_model=SensorLastDataResponse)
 async def get_last_sensor_data(mac_address: str):
     query = f"""
     from(bucket: "db")
-        |> range(start: -1y) // Adjust the range as needed
+        |> range(start: -1y)
         |> filter(fn: (r) => r["topic"] == "/sensors/{mac_address}")
-        |> group(columns: ["_field"]) // Group by field to isolate each one
-        |> last() // Get the last value for each group (field)
+        |> group(columns: ["_field"])
+        |> last()
     """
     tables = query_api.query(query)
 
     result = {
-
+        "time": None,
+        "light": None,
+        "soil": None,
+        "humidity": None,
+        "temp": None,
     }
 
     for table in tables:
         for record in table.records:
-            result.update({
-                record.get_field(): record.get_value()
-            })
+            field = record.get_field()
+            value = record.get_value()
+            timestamp = record.get_time()
 
-    return SensorLastDataResponse(
-        light=result.get("light"),
-        soil=result.get("soil"),
-        humidity=result.get("humidity"),
-        temp=result.get("temp"),
-    )
+            # Set values into the result dictionary
+            result[field] = value
+
+            # Optionally: set 'time' as the latest timestamp among records
+            # or just overwrite — since each field's last value has its own _time
+            result["time"] = timestamp
+
+
+    return SensorLastDataResponse(**result)
 
 
 
@@ -54,7 +61,7 @@ async def get_last_sensor_data_humidity(mac_address: str):
     from(bucket: "db")
         |> range(start: -1y) // Adjust the range as needed
         |> filter(fn: (r) => r["topic"] == "/sensors/{mac_address}")
-        |> filter(fn: (r) => r["_field"] == "humidity")
+        |> filter(fn: (r) => r["_field"] == "soil")
         |> group(columns: ["_field"]) // Group by field to isolate each one
         |> last() // Get the last value for each group (field)
     """

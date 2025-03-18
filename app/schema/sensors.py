@@ -25,6 +25,7 @@ class SensorGet(BaseModel):
     home_id: Optional[int]
 
 class SensorLastDataResponse(BaseModel):
+    time: datetime
     humidity: Optional[int]
     light: Optional[float]
     soil: Optional[int]
