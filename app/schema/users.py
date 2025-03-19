@@ -22,3 +22,8 @@ class UserResponse(BaseModel):
     email: str
     image: str
     created_at: datetime
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
+    image: Optional[str] = None

@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     INFLUXDB_ORG: str
     NATIVENOTIFY_FIRST: str
     NATIVENOTIFY_SECOND: str
+    R2_ENDPOINT_URL: str
+    AWS_ACCESS_KEY_ID: str
+    AWS_SECRET_ACCESS_KEY: str
+    R2_BUCKET_NAME: str
+    AWS_CUSTOM_DOMAIN: str
 
 enviroment = Settings()
 
